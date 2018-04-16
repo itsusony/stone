@@ -46,27 +46,15 @@
  *
  * Make:
  * gcc -o stone stone.c
- * or
- * cl -DWINDOWS stone.c /MT wsock32.lib
- * or
- * gcc -DWINDOWS -o stone.exe stone.c -lwsock32
  *
  * POP -> APOP conversion
  * gcc -DUSE_POP -o stone stone.c md5c.c
- * or
- * cl -DWINDOWS -DUSE_POP stone.c md5c.c /MT wsock32.lib
- * or
- * gcc -DWINDOWS -DUSE_POP -o stone.exe stone.c md5c.c -lwsock32
  *
  * md5c.c global.h md5.h are contained in RFC1321
  *
  * Using OpenSSL
  * gcc -DUSE_SSL -I/usr/local/ssl/include -o stone stone.c \
  *               -L/usr/local/ssl/lib -lssl -lcrypto
- * or
- * cl -DWINDOWS -DUSE_SSL stone.c /MT wsock32.lib ssleay32.lib libeay32.lib
- * or
- * gcc -DWINDOWS -DUSE_SSL -o stone.exe stone.c -lwsock32 -lssl32 -leay32
  *
  * -DUSE_POP	  use POP -> APOP conversion
  * -DUSE_SSL	  use OpenSSL
@@ -88,8 +76,6 @@
  * -DPTHREAD      use Posix Thread
  * -DPRCTL	  use prctl(2) - operations on a process
  * -DOS2	  OS/2 with EMX
- * -DWINDOWS	  Windows95/98/NT
- * -DNT_SERVICE	  WindowsNT/2000 native service
  */
 #define VERSION	"2.3e"
 static char *CVS_ID =
@@ -112,59 +98,6 @@ static char *CVS_ID =
 
 typedef void (*FuncPtr)(void*);
 
-#ifdef WINDOWS
-#define FD_SETSIZE	4096
-#include <process.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#if !defined(EINPROGRESS) && defined(WSAEWOULDBLOCK)
-#define EINPROGRESS     WSAEWOULDBLOCK
-#endif
-#if !defined(EMSGSIZE) && defined(WSAEMSGSIZE)
-#define	EMSGSIZE	WSAEMSGSIZE
-#endif
-#if !defined(EADDRINUSE) && defined(WSAEADDRINUSE)
-#define	EADDRINUSE	WSAEADDRINUSE
-#endif
-#if !defined(ECONNABORTED) && defined(WSAECONNABORTED)
-#define	ECONNABORTED	WSAECONNABORTED
-#endif
-#if !defined(ECONNRESET) && defined(WSAECONNRESET)
-#define	ECONNRESET	WSAECONNRESET
-#endif
-#if !defined(EISCONN) && defined(WSAEISCONN)
-#define	EISCONN		WSAEISCONN
-#endif
-#include <time.h>
-#ifdef NT_SERVICE
-#include <windows.h>
-#include "logmsg.h"
-#endif
-#define NO_SYSLOG
-#define NO_FORK
-#define NO_SETUID
-#define NO_CHROOT
-#define	NO_GETTIMEOFDAY
-#define NO_FAMILY_T
-#define	NO_UNIXDOMAIN
-#define ValidSocket(sd)		((sd) != INVALID_SOCKET)
-#define FD_SET_BUG
-#undef EINTR
-#define EINTR	WSAEINTR
-#define NO_BCOPY
-#define bzero(b,n)	memset(b,0,n)
-#define	usleep(usec)	Sleep(usec)
-#define ASYNC(func,arg)	{\
-    if (Debug > 7) message(LOG_DEBUG, "ASYNC: %d", AsyncCount);\
-    waitMutex(AsyncMutex);\
-    AsyncCount++;\
-    freeMutex(AsyncMutex);\
-    if (_beginthread((FuncPtr)func, 0, arg) < 0) {\
-	message(LOG_ERR, "_beginthread error err=%d", errno);\
-	func(arg);\
-    }\
-}
-#else	/* ! WINDOWS */
 #include <sys/param.h>
 #ifdef OS2
 #define INCL_DOSSEMAPHORES
@@ -183,7 +116,7 @@ typedef void (*FuncPtr)(void*);
 	func(arg);\
     }\
 }
-#else	/* ! WINDOWS & ! OS2 */
+#else	/* ! OS2 */
 #ifdef PTHREAD
 #include <pthread.h>
 pthread_attr_t thread_attr;
@@ -212,7 +145,7 @@ typedef void *(*aync_start_routine) (void *);
 }
 #define NO_THREAD
 #endif	/* ! PTHREAD */
-#endif	/* ! WINDOWS & ! OS2 */
+#endif	/* ! OS2 */
 #include <sys/wait.h>
 #include <sys/time.h>
 #include <sys/socket.h>
@@ -237,7 +170,7 @@ typedef int SOCKET;
 #define INVALID_SOCKET		-1
 #define ValidSocket(sd)		((sd) >= 0)
 #define closesocket(sd)		close(sd)
-#endif	/* ! WINDOWS */
+
 #define InvalidSocket(sd)	(!ValidSocket(sd))
 #ifdef USE_EPOLL
 #include <sys/epoll.h>
@@ -381,12 +314,8 @@ SSLOpts ClientOpts;
 int PairIndex;
 int MatchIndex;
 int NewMatchCount = 0;
-#ifdef WINDOWS
-HANDLE *SSLMutex = NULL;
-#else
 #ifdef PTHREAD
 pthread_mutex_t *SSLMutex = NULL;
-#endif
 #endif
 int NSSLMutexs = 0;
 
@@ -758,14 +687,6 @@ char FastMutexs[11];
 #define	HashMutex	10
 #endif
 #endif
-#ifdef WINDOWS
-HANDLE PairMutex, ConnMutex, OrigMutex, AsyncMutex;
-HANDLE FdRinMutex, FdWinMutex, FdEinMutex;
-HANDLE ExBufMutex, FPairMutex, PkBufMutex;
-#ifdef ADDRCACHE
-HANDLE HashMutex;
-#endif
-#endif
 #ifdef OS2
 HMTX PairMutex, ConnMutex, OrigMutex, AsyncMutex;
 HMTX FdRinMutex, FdWinMutex, FdEinMutex;
@@ -841,27 +762,6 @@ char *strdup(const char *s) {
 }
 #endif
 
-#ifdef WINDOWS
-struct tm *localtime_r(const time_t *clock, struct tm *t) {
-    FILETIME utc, local;
-    SYSTEMTIME system;
-    LONGLONG ll;
-    ll = Int32x32To64(*clock, 10000000) + 116444736000000000ULL;
-    utc.dwLowDateTime = (DWORD)ll;
-    utc.dwHighDateTime = ll >> 32;
-    if (!FileTimeToLocalFileTime(&utc, &local)) return NULL;
-    if (!FileTimeToSystemTime(&local, &system)) return NULL;
-    t->tm_sec = system.wSecond;
-    t->tm_min = system.wMinute;
-    t->tm_hour = system.wHour;
-    t->tm_mday = system.wDay;
-    t->tm_mon = system.wMonth-1;
-    t->tm_year = system.wYear-1900;
-    t->tm_wday = system.wDayOfWeek;
-    return t;
-}
-#endif
-
 static char Month[][4] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
 			  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
@@ -926,12 +826,8 @@ void message(int pri, char *fmt, ...) {
 	str[LONGSTRMAX] = '\0';
 	pos = strlen(str);
     }
-#ifdef WINDOWS
-    thid = (unsigned long)GetCurrentThreadId();
-#else
 #ifdef PTHREAD
     thid = (unsigned long)pthread_self();
-#endif
 #endif
     if (thid) {
 	snprintf(str+pos, LONGSTRMAX-pos, "%lu ", thid);
@@ -1273,9 +1169,6 @@ char *addr2str(struct sockaddr *sa, socklen_t salen,
     if (AddrFlag) flags |= NI_NUMERICHOST;
     err = getnameinfo(sa, salen, str, len, NULL, 0, flags);
     if (err) {
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	addr2numeric(sa, str, len);
 	if (len >= 1) str[len-1] = '\0';
 	message(LOG_ERR, "Unknown address: %s err=%d errno=%d",
@@ -1341,9 +1234,6 @@ char *addrport2str(struct sockaddr *sa, socklen_t salen,
 	} else {
 	    snprintf(str, len, "%s:?", "???");
 	}
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	message(LOG_ERR, "Unknown node:serv %s len=%d err=%d errno=%d",
 		str, salen, err, errno);
     } else {
@@ -1519,9 +1409,6 @@ int host2sa(char *name, char *serv, struct sockaddr *sa, socklen_t *salenp,
     }
     err = getaddrinfo(name, serv, &hint, &ai);
     if (err != 0) {
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	message(LOG_ERR, "getaddrinfo for %s:%s failed err=%d errno=%d",
 		(name ? name : ""), (serv ? serv : ""), err, errno);
     fail:
@@ -1670,31 +1557,6 @@ XHosts *checkXhost(XHosts *xhosts, struct sockaddr *sa, socklen_t salen) {
     return NULL;
 }
 
-#ifdef WINDOWS
-void waitMutex(HANDLE h) {
-    DWORD ret;
-    if (h) {
-	ret = WaitForSingleObject(h, 5000);	/* 5 sec */
-	if (ret == WAIT_FAILED) {
-	    message(LOG_ERR, "Fail to wait mutex err=%d, existing",
-		    (int)GetLastError());
-	    exit(1);
-	} else if (ret == WAIT_TIMEOUT) {
-	    message(LOG_ERR, "timeout to wait mutex, existing");
-	    exit(1);
-	}
-    }
-}
-
-void freeMutex(HANDLE h) {
-    if (h) {
-	if (!ReleaseMutex(h)) {
-	    message(LOG_ERR, "Fail to release mutex err=%d",
-		    (int)GetLastError());
-	}
-    }
-}
-#else	/* ! WINDOWS */
 #ifdef OS2
 void waitMutex(HMTX h) {
     APIRET ret;
@@ -1717,7 +1579,7 @@ void freeMutex(HMTX h) {
 	}
     }
 }
-#else	/* ! OS2 & ! WINDOWS */
+#else	/* ! OS2 */
 #ifdef PTHREAD
 void waitMutex(int h) {
     int err;
@@ -1755,10 +1617,9 @@ void freeMutex(int h) {
     }
     pthread_mutex_unlock(&FastMutex);
 }
-#else	/* ! OS2 & ! WINDOWS & PTHREAD */
+#else	/* ! OS2 & PTHREAD */
 #define waitMutex(sem)	/* */
 #define freeMutex(sem)	/* */
-#endif
 #endif
 #endif
 
@@ -1769,9 +1630,6 @@ int healthCheck(struct sockaddr *sa, socklen_t salen,
     SOCKET sd;
     int ret;
     char addrport[STRMAX+1];
-#ifdef WINDOWS
-    u_long param;
-#endif
 #ifdef USE_EPOLL
     int epfd;
     struct epoll_event ev;
@@ -1781,9 +1639,6 @@ int healthCheck(struct sockaddr *sa, socklen_t salen,
     time(&start);
     sd = socket(sa->sa_family, SOCK_STREAM, IPPROTO_TCP);
     if (InvalidSocket(sd)) {
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	message(LOG_ERR, "health check: can't create socket err=%d",
 		errno);
 	return 1;	/* I can't tell the master is healthy or not */
@@ -1803,18 +1658,10 @@ int healthCheck(struct sockaddr *sa, socklen_t salen,
 #endif
     addrport[0] = '\0';
     if (!(proto & proto_block_d)) {
-#ifdef WINDOWS
-	param = 1;
-	ioctlsocket(sd, FIONBIO, &param);
-#else
 	fcntl(sd, F_SETFL, O_NONBLOCK);
-#endif
     }
     ret = connect(sd, sa, salen);
     if (ret < 0) {
-#ifdef WINDOWS
-        errno = WSAGetLastError();
-#endif
 	if (errno == EINPROGRESS) {
 #ifndef USE_EPOLL
 	    fd_set wout;
@@ -1862,9 +1709,6 @@ int healthCheck(struct sockaddr *sa, socklen_t salen,
 	int err;
 	ret = send(sd, chat->send, chat->len, 0);
 	if (ret < 0 || ret != chat->len) {
-#ifdef WINDOWS
-	    errno = WSAGetLastError();
-#endif
 	    addrport2strOnce(sa, salen, (proto & proto_pair_d),
 			     addrport, STRMAX, 0);
 	    message(LOG_ERR, "health check: send %s err=%d",
@@ -1898,9 +1742,6 @@ int healthCheck(struct sockaddr *sa, socklen_t salen,
 		);
 	    ret = recv(sd, buf+len, BUFMAX-1-len, 0);
 	    if (ret < 0) {
-#ifdef WINDOWS
-		errno = WSAGetLastError();
-#endif
 		addrport2strOnce(sa, salen, (proto & proto_pair_d),
 				 addrport, STRMAX, 0);
 		message(LOG_ERR, "health check: recv from %s err=%d",
@@ -2553,9 +2394,6 @@ void message_origin(int pri, Origin *origin) {
     i = strlen(str);
     if (ValidSocket(origin->sd)) {
 	if (getsockname(origin->sd, name, &namelen) < 0) {
-#ifdef WINDOWS
-	    errno = WSAGetLastError();
-#endif
 	    if (Debug > 3)
 		message(LOG_DEBUG, "%d UDP %d: Can't get socket's name err=%d",
 			origin->stone->sd, origin->sd, errno);
@@ -2642,9 +2480,6 @@ Origin *getOrigins(struct sockaddr *from, socklen_t fromlen, Stone *stone) {
     /* can't find origin, so create */
     sd = socket(from->sa_family, SOCK_DGRAM, IPPROTO_UDP);
     if (InvalidSocket(sd)) {
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	message(LOG_ERR, "%d UDP: can't create datagram socket err=%d",
 		stone->sd, errno);
 	return NULL;
@@ -2656,13 +2491,7 @@ Origin *getOrigins(struct sockaddr *from, socklen_t fromlen, Stone *stone) {
 		addrport2str(from, fromlen, proto_udp, addrport, STRMAX, 0));
     }
     if (!(stone->proto & proto_block_d)) {
-#ifdef WINDOWS
-	u_long param;
-	param = 1;
-	ioctlsocket(sd, FIONBIO, &param);
-#else
 	fcntl(sd, F_SETFL, O_NONBLOCK);
-#endif
     }
     origin = malloc(sizeof(Origin));
     if (!origin) {
@@ -2733,9 +2562,6 @@ PktBuf *recvUDP(Stone *stone) {
 #endif
     pb->len = recvfrom(sd, pb->buf, pb->bufmax, flags, from, &fromlen);
     if (pb->len < 0) {
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	if (errno == EMSGSIZE) {
 	    if (Debug > 4)
 		message(LOG_DEBUG, "%d UDP%s%d: recvfrom received larger msg",
@@ -2815,9 +2641,6 @@ int sendUDP(PktBuf *pb) {
 	char addrport[STRMAX+1];
 	addrport2str(sa, salen, proto_udp, addrport, STRMAX, 0);
 	addrport[STRMAX] = '\0';
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	message(LOG_ERR, "%d UDP%s%d: sendto failed err=%d: to %s",
 		stone->sd, dirstr, origin->sd, errno, addrport);
 	return -1;
@@ -2963,9 +2786,6 @@ int recvPairUDP(Pair *pair) {
 		   ex->bufmax - UDP_HEAD_LEN,
 		   flags, from, &fromlen);
     if (len < 0) {
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	message(LOG_ERR, "%d UDP %d: recvfrom err=%d",
 		stone->sd, sd, errno);
 	if (ex != p->b) ungetExBuf(ex);
@@ -3036,9 +2856,6 @@ static int sendPairUDPbuf(Stone *stone, Pair *pair, char *buf, int len) {
 	char addrport[STRMAX+1];
 	addrport2str(&peer->addr, peer->len, proto_udp, addrport, STRMAX, 0);
 	addrport[STRMAX] = '\0';
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	if (issrc) {
 	    message(LOG_ERR, "%d UDP<TCP%d: sendto failed err=%d: to %s",
 		    stone->sd, (p ? p->sd : -1), errno, addrport);
@@ -3187,9 +3004,6 @@ void message_pair(int pri, Pair *pair) {
     sd = pair->sd;
     if (ValidSocket(sd)) {
 	if (getsockname(sd, name, &namelen) < 0) {
-#ifdef WINDOWS
-	    errno = WSAGetLastError();
-#endif
 	    if (Debug > 3)
 		message(LOG_DEBUG, "%d TCP %d: Can't get socket's name err=%d",
 			pair->stone->sd, sd, errno);
@@ -3200,9 +3014,6 @@ void message_pair(int pri, Pair *pair) {
 	}
 	namelen = sizeof(ss);
 	if (getpeername(sd, name, &namelen) < 0) {
-#ifdef WINDOWS
-	    errno = WSAGetLastError();
-#endif
 	    if (Debug > 3)
 		message(LOG_DEBUG, "%d TCP %d: Can't get peer's name err=%d",
 			pair->stone->sd, sd, errno);
@@ -3298,9 +3109,6 @@ int doSSL_accept(Pair *pair) {
     } else if (err == SSL_ERROR_SYSCALL) {
 	unsigned long e = ERR_get_error();
 	if (e == 0) {
-#ifdef WINDOWS
-	    errno = WSAGetLastError();
-#endif
 	    if (errno == EINTR || errno == EAGAIN) {
 		pair->ssl_flag |= (sf_ab_on_r | sf_ab_on_r);
 		if (Debug > 8)
@@ -3393,9 +3201,6 @@ int doSSL_connect(Pair *pair) {
     } else if (err == SSL_ERROR_SYSCALL) {
 	unsigned long e = ERR_get_error();
 	if (e == 0) {
-#ifdef WINDOWS
-	    errno = WSAGetLastError();
-#endif
 	    if (errno == 0) {
 		return 1;	/* success ? */
 	    } else if (errno == EINTR || errno == EAGAIN) {
@@ -3468,9 +3273,6 @@ int doSSL_shutdown(Pair *pair, int how) {
 	} else if (err == SSL_ERROR_SYSCALL) {
 	    unsigned long e = ERR_get_error();
 	    if (e == 0) {
-#ifdef WINDOWS
-		errno = WSAGetLastError();
-#endif
 		if (errno == 0) {
 		    ret = 1;	/* success ? */
 		} else if (errno == EINTR || errno == EAGAIN) {
@@ -3788,9 +3590,6 @@ int doconnect(Pair *p1, struct sockaddr *sa, socklen_t salen) {
 #ifdef USE_EPOLL
     struct epoll_event ev;
 #endif
-#ifdef WINDOWS
-    u_long param;
-#endif
     if (p1 == NULL) return -1;
     p2 = p1->pair;
     if (p2 == NULL) return -1;
@@ -3807,12 +3606,7 @@ int doconnect(Pair *p1, struct sockaddr *sa, socklen_t salen) {
       now destination is determined, engage
     */
     if (!(p1->stone->proto & proto_block_d)) {
-#ifdef WINDOWS
-	param = 1;
-	ioctlsocket(p1->sd, FIONBIO, &param);
-#else
 	fcntl(p1->sd, F_SETFL, O_NONBLOCK);
-#endif
     }
     addrport[0] = '\0';
     if (Debug > 2) {
@@ -3827,9 +3621,6 @@ int doconnect(Pair *p1, struct sockaddr *sa, socklen_t salen) {
 	ret = connect(p1->sd, dst, dstlen);
     }
     if (ret < 0) {
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	if (errno == EINPROGRESS) {
 	    p1->proto |= (proto_conninprog | proto_dirty);
 	    if (Debug > 3)
@@ -4028,9 +3819,6 @@ Pair *acceptPair(Stone *stone) {
 #endif
     SOCKET nsd = accept(stone->sd, from, &fromlen);
     if (InvalidSocket(nsd)) {
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	if (errno == EINTR) {
 	    if (Debug > 4)
 		message(LOG_DEBUG, "stone %d: accept interrupted", stone->sd);
@@ -4091,9 +3879,6 @@ int getident(char *str, struct sockaddr *sa, socklen_t salen,
     int len;
     int ret;
     char addr[STRMAX+1];
-#ifdef WINDOWS
-    u_long param;
-#endif
     time_t start, now;
 #ifdef USE_EPOLL
     int epfd = INVALID_SOCKET;
@@ -4108,18 +3893,12 @@ int getident(char *str, struct sockaddr *sa, socklen_t salen,
     }
     sd = socket(peer->sa_family, SOCK_STREAM, IPPROTO_TCP);
     if (InvalidSocket(sd)) {
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	if (Debug > 0)
 	    message(LOG_DEBUG, "ident: can't create socket err=%d", errno);
 	return 0;
     }
     saPort(csa, 0);
     if (bind(sd, csa, csalen) < 0) {
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	if (Debug > 0)
 	    message(LOG_DEBUG, "ident: can't bind socket err=%d", errno);
 	/* hope default source address is adequate */
@@ -4127,12 +3906,7 @@ int getident(char *str, struct sockaddr *sa, socklen_t salen,
     saPort(peer, 113);	/* ident protocol */
     addr2str(peer, peerlen, addr, STRMAX, 0);
     addr[STRMAX] = '\0';
-#ifdef WINDOWS
-    param = 1;
-    ioctlsocket(sd, FIONBIO, &param);
-#else
     fcntl(sd, F_SETFL, O_NONBLOCK);
-#endif
 #ifdef USE_EPOLL
     epfd = epoll_create(BACKLOG_MAX);
     if (epfd < 0) {
@@ -4148,9 +3922,6 @@ int getident(char *str, struct sockaddr *sa, socklen_t salen,
 #endif
     ret = connect(sd, peer, peerlen);
     if (ret < 0) {
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	if (errno == EINPROGRESS) {
 #ifndef USE_EPOLL
 	    fd_set wout;
@@ -4200,9 +3971,6 @@ int getident(char *str, struct sockaddr *sa, socklen_t salen,
     len = strlen(buf);
     ret = send(sd, buf, len, 0);
     if (ret != len) {
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	if (Debug > 0)
 	    message(LOG_DEBUG,
 		    "ident: can't send  to %s ret=%d err=%d buf=%s",
@@ -4300,9 +4068,6 @@ int acceptCheck(Pair *pair1) {
 	message(LOG_ERR, "%d TCP %d: acceptCheck Can't happen fromlen=%d",
 		stone->sd, pair1->sd, fromlen);
 	if (getpeername(pair1->sd, from, &fromlen) < 0) {
-#ifdef WINDOWS
-	    errno = WSAGetLastError();
-#endif
 	    message(LOG_ERR,
 		    "%d TCP %d: acceptCheck Can't get peer's name err=%d",
 		    stone->sd, pair1->sd, errno);
@@ -4378,13 +4143,7 @@ int acceptCheck(Pair *pair1) {
     pair2->timeout = stone->timeout;
     /* now successfully accepted */
     if (!(stone->proto & proto_block_d)) {
-#ifdef WINDOWS
-	u_long param;
-	param = 1;
-	ioctlsocket(pair1->sd, FIONBIO, &param);
-#else
 	fcntl(pair1->sd, F_SETFL, O_NONBLOCK);
-#endif
     }
 #ifdef USE_SSL
     if (stone->proto & proto_ssl_s) {
@@ -4417,9 +4176,6 @@ int acceptCheck(Pair *pair1) {
 #endif
 	pair2->sd = socket(AF_INET, satype, saproto);
     if (InvalidSocket(pair2->sd)) {
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	message(priority(pair1), "%d TCP %d: can't create socket err=%d",
 		stone->sd, pair1->sd, errno);
 #ifdef USE_SSL
@@ -4431,9 +4187,6 @@ int acceptCheck(Pair *pair1) {
     if (stone->from) {
 	if (bind(pair2->sd, &stone->from->addr, stone->from->len) < 0) {
 	    char str[STRMAX+1];
-#ifdef WINDOWS
-	    errno = WSAGetLastError();
-#endif
 	    addrport2str(&stone->from->addr, stone->from->len, 0,
 			 str, STRMAX, 0);
 	    str[STRMAX] = '\0';
@@ -4842,9 +4595,6 @@ int dowrite(Pair *pair) {	/* write from buf from pair->t->start */
 	    if (err == SSL_ERROR_SYSCALL) {
 		unsigned long e = ERR_get_error();
 		if (e == 0) {
-#ifdef WINDOWS
-		    errno = WSAGetLastError();
-#endif
 		    if (errno == EINTR) {
 			if (Debug > 4)
 			    message(LOG_DEBUG,
@@ -4877,9 +4627,6 @@ int dowrite(Pair *pair) {	/* write from buf from pair->t->start */
 	len = send(sd, &ex->buf[ex->start], ex->len, 0);
 	if (pair->proto & proto_close) return -1;
 	if (len < 0) {
-#ifdef WINDOWS
-	    errno = WSAGetLastError();
-#endif
 	    if (errno == EINTR) {
 		if (Debug > 4)
 		    message(LOG_DEBUG, "%d TCP %d: write interrupted",
@@ -5099,9 +4846,6 @@ int doread(Pair *pair) {	/* read into buf from pair->pair->b->start */
 	    if (err == SSL_ERROR_SYSCALL) {
 		unsigned long e = ERR_get_error();
 		if (e == 0) {
-#ifdef WINDOWS
-		    errno = WSAGetLastError();
-#endif
 		    if (errno == EINTR) {
 			if (Debug > 4)
 			    message(LOG_DEBUG,
@@ -5134,9 +4878,6 @@ int doread(Pair *pair) {	/* read into buf from pair->pair->b->start */
 	len = recv(sd, &ex->buf[start], bufmax, 0);
 	if (pair->proto & proto_close) return -1;
 	if (len < 0) {
-#ifdef WINDOWS
-	    errno = WSAGetLastError();
-#endif
 	    if (errno == EINTR) {
 		if (Debug > 4)
 		    message(LOG_DEBUG, "%d TCP %d: read interrupted",
@@ -6331,9 +6072,6 @@ int doReadWritePair(Pair *pair, Pair *opposite,
 	pair->proto |= proto_dirty;
 	if (getsockopt(sd, SOL_SOCKET, SO_ERROR,
 		       (char*)&optval, &optlen) < 0) {
-#ifdef WINDOWS
-	    errno = WSAGetLastError();
-#endif
 	    message(LOG_ERR, "%d TCP %d: getsockopt err=%d", stsd, sd, errno);
 	    pair->proto |= (proto_close | proto_dirty);
 	    if (opposite) opposite->proto |= (proto_close | proto_dirty);
@@ -6362,18 +6100,12 @@ int doReadWritePair(Pair *pair, Pair *opposite,
 	    if (ValidSocket(wsd)) {
 		len = send(wsd, buf, 1, MSG_OOB);
 		if (len != 1) {
-#ifdef WINDOWS
-		    errno = WSAGetLastError();
-#endif
 		    message(LOG_ERR,
 			    "%d TCP %d: send MSG_OOB ret=%d, err=%d",
 			    stsd, sd, len, errno);
 		}
 	    }
 	} else {
-#ifdef WINDOWS
-	    errno = WSAGetLastError();
-#endif
 	    message(LOG_ERR, "%d TCP %d: recv MSG_OOB ret=%d, err=%d",
 		    stsd, sd, len, errno);
 	}
@@ -6861,9 +6593,6 @@ void recvStoneUDP(Stone *stone) {
 		       flags, from, &fromlen);
 	addrport[0] = '\0';
 	if (len < 0) {
-#ifdef WINDOWS
-	    errno = WSAGetLastError();
-#endif
 	    addrport2strOnce(from, fromlen, proto_udp, addrport, STRMAX, 0);
 	    message(LOG_ERR, "%d UDP: recvfrom err=%d %s",
 		    stone->sd, errno, addrport);
@@ -7700,9 +7429,6 @@ void repeater(void) {
 	(void)(scanStones(&rout, &wout, &eout) > 0);
 #endif
     } else if (ret < 0) {
-#ifdef WINDOWS
-	errno = WSAGetLastError();
-#endif
 	if (errno != EINTR) {
 #ifdef USE_EPOLL
 	    message(LOG_ERR, "epoll %d error err=%d", ePollFd, errno);
@@ -8183,9 +7909,6 @@ Stone *mkstone(
     if (!reusestone(stone)) {	/* recycle stone */
 	stone->sd = socket(sa->sa_family, satype, saproto);
 	if (InvalidSocket(stone->sd)) {
-#ifdef WINDOWS
-	    errno = WSAGetLastError();
-#endif
 	    message(LOG_ERR, "stone %d: Can't get socket "
 		    "family=%d type=%d proto=%d err=%d",
 		    stone->sd, sa->sa_family, satype, saproto, errno);
@@ -8212,9 +7935,6 @@ Stone *mkstone(
 	} else if (!DryRun) {
 	    if (bind(stone->sd, sa, salen) < 0) {
 		char str[STRMAX+1];
-#ifdef WINDOWS
-		errno = WSAGetLastError();
-#endif
 		addrport2str(sa, salen, 0, str, STRMAX, 0);
 		str[STRMAX] = '\0';
 		message(LOG_ERR, "stone %d: Can't bind %s err=%d",
@@ -8222,13 +7942,7 @@ Stone *mkstone(
 		exit(1);
 	    }
 	    if (!(stone->proto & proto_block_s)) {
-#ifdef WINDOWS
-		u_long param;
-		param = 1;
-		ioctlsocket(stone->sd, FIONBIO, &param);
-#else
 		fcntl(stone->sd, F_SETFL, O_NONBLOCK);
-#endif
 	    }
 	    if (stone->port == 0) {
 		salen = sizeof(ss);
@@ -8238,9 +7952,6 @@ Stone *mkstone(
 	    }
 	    if (!(proto & proto_udp_s)) {	/* TCP */
 		if (listen(stone->sd, BacklogMax) < 0) {
-#ifdef WINDOWS
-		    errno = WSAGetLastError();
-#endif
 		    message(LOG_ERR, "stone %d: Can't listen err=%d",
 			    stone->sd, errno);
 		    exit(1);
@@ -9066,12 +8777,8 @@ int sslopts(int argc, int argi, char *argv[], SSLOpts *opts, int isserver) {
 /* SSL callback */
 unsigned long sslthread_id_callback(void) {
     unsigned long ret;
-#ifdef WINDOWS
-    ret = (unsigned long)GetCurrentThreadId();
-#else
 #ifdef PTHREAD
     ret = (unsigned long)pthread_self();
-#endif
 #endif
     if (Debug > 19) message(LOG_DEBUG, "SSL_thread id=%ld", ret);
     return ret;
@@ -9082,23 +8789,15 @@ void sslthread_lock_callback(int mode, int n, const char *file, int line) {
 	if (Debug > 19)
 	    message(LOG_DEBUG, "SSL_lock mode=%x n=%d file=%s line=%d",
 		    mode, n, file, line);
-#ifdef WINDOWS
-	WaitForSingleObject(SSLMutex[n], 500);
-#else
 #ifdef PTHREAD
 	pthread_mutex_lock(&SSLMutex[n]);
-#endif
 #endif
     } else {
 	if (Debug > 19)
 	    message(LOG_DEBUG, "SSL_unlock mode=%x n=%d file=%s line=%d",
 		    mode, n, file, line);
-#ifdef WINDOWS
-	ReleaseMutex(SSLMutex[n]);
-#else
 #ifdef PTHREAD
 	pthread_mutex_unlock(&SSLMutex[n]);
-#endif
 #endif
     }
 }
@@ -9110,16 +8809,11 @@ int sslthread_initialize(void) {
     if (!SSLMutex) return -1;
     if (Debug > 1) message(LOG_DEBUG, "SSL thread nlocks=%d", NSSLMutexs);
     for (i=0; i < NSSLMutexs; i++) {
-#ifdef WINDOWS
-	SSLMutex[i] = CreateMutex(NULL, FALSE, NULL);
-	if (!SSLMutex[i]) return -1;
-#else
 #ifdef PTHREAD
 	pthread_mutex_init(&SSLMutex[i], NULL);
 #endif
-#endif
     }
-#if defined(WINDOWS) || defined(PTHREAD)
+#if defined(PTHREAD)
     CRYPTO_set_id_callback(sslthread_id_callback);
     CRYPTO_set_locking_callback(sslthread_lock_callback);
     return 1;
@@ -9771,129 +9465,6 @@ void checkFdSetBug(void) {
 }
 #endif
 
-#ifndef WINDOWS
-static void handler(int sig) {
-    int i;
-    switch(sig) {
-    case SIGHUP:
-	if (Debug > 4) message(LOG_DEBUG, "SIGHUP");
-#ifndef NO_FORK
-	if (NForks) {	/* mother process */
-	    if (ConfigFile && !oldstones) {
-	        oldstones = stones;
-		stones = NULL;
-		OldConfigArgc = ConfigArgc;
-		OldConfigArgv = ConfigArgv;
-		Debug = 0;
-		getconfig();	/* reconfigure */
-		i = doopts(ConfigArgc, ConfigArgv);
-		doargs(ConfigArgc, i, ConfigArgv);
-		for (i=0; i < NForks; i++) {
-		    kill(Pid[i], SIGHUP);
-		    kill(Pid[i], SIGINT);
-		}
-	    }
-	} else {	/* child process */
-#endif
-	    message_pairs(LOG_INFO);
-	    message_origins(LOG_INFO);
-	    message_conns(LOG_INFO);
-#ifndef NO_FORK
-	}
-#endif
-	if (LogFileName) {
-	    fclose(LogFp);
-	    LogFp = fopen(LogFileName, "a");
-	    if (LogFp == NULL) {
-		LogFp = stderr;
-		message(LOG_ERR, "Can't re-create log file: %s err=%d",
-			LogFileName, errno);
-		exit(1);
-	    }
-	    setbuf(LogFp, NULL);
-	}
-	if (AccFileName) {
-	    fclose(AccFp);
-	    AccFp = fopen(AccFileName, "a");
-	    if (AccFp == NULL) {
-		message(LOG_ERR, "Can't re-create account log file: %s err=%d",
-			AccFileName, errno);
-		exit(1);
-	    }
-	    setbuf(AccFp, NULL);
-	}
-	signal(SIGHUP, handler);
-	break;
-    case SIGTERM:
-#ifdef IGN_SIGTERM
-	Debug = 0;
-	message(LOG_INFO, "SIGTERM. clear Debug level");
-	signal(SIGTERM, handler);
-	break;
-#endif
-    case SIGINT:
-#ifndef NO_FORK
-	if (NForks) {	/* mother process */
-	    message(LOG_INFO, "SIGTERM/INT. killing children and exiting");
-	    for (i=0; i < NForks; i++) kill(Pid[i], sig);
-	} else
-#endif
-	    message(LOG_INFO, "SIGTERM/INT. exiting");  /* child process */
-	exit(1);
-    case SIGUSR1:
-	Debug++;
-	message(LOG_INFO, "SIGUSR1. increase Debug level to %d", Debug);
-#ifndef NO_FORK
-	if (NForks) {	/* mother process */
-	    for (i=0; i < NForks; i++) kill(Pid[i], sig);
-	} else {
-#endif
-	    message_pairs(LOG_INFO);
-	    message_origins(LOG_INFO);
-	    message_conns(LOG_INFO);
-#ifndef NO_FORK
-	}
-#endif
-	signal(SIGUSR1, handler);
-	break;
-    case SIGUSR2:
-	if (Debug > 0) Debug--;
-	message(LOG_INFO, "SIGUSR2. decrease Debug level to %d", Debug);
-#ifndef NO_FORK
-	if (NForks) {	/* mother process */
-	    for (i=0; i < NForks; i++) kill(Pid[i], sig);
-	}
-#endif
-	signal(SIGUSR2, handler);
-	break;
-    case SIGPIPE:
-	if (Debug > 0) message(LOG_DEBUG, "SIGPIPE");
-	signal(SIGPIPE, handler);
-	break;
-    case SIGSEGV:
-    case SIGBUS:
-    case SIGILL:
-    case SIGFPE:
-	if (CoreDumpDir) {
-	    message(LOG_ERR, "Signal %d, core dumping to %s",
-		    sig, CoreDumpDir);
-	    if (chdir(CoreDumpDir) < 0) {
-		message(LOG_ERR, "Can't chdir to %s err=%d",
-			CoreDumpDir, errno);
-	    } else {
-		abort();
-	    }
-	} else {
-	    message(LOG_ERR, "Signal %d, exiting", sig);
-	}
-	exit(1);
-	break;
-    default:
-	message(LOG_INFO, "signal %d. Debug level: %d", sig, Debug);
-    }
-}
-#endif
-
 #ifdef UNIX_DAEMON
 void daemonize(void) {
     pid_t pid;
@@ -9925,14 +9496,6 @@ void daemonize(void) {
 void initialize(int argc, char *argv[]) {
     int i;
     int j = 0;	/* dummy init to suppress warnings */
-#ifdef WINDOWS
-    WSADATA WSAData;
-    if (WSAStartup(MAKEWORD(1, 1), &WSAData)) {
-	message(LOG_ERR, "Can't find winsock");
-	exit(1);
-    }
-    atexit((void(*)(void))WSACleanup);
-#endif
     MyPid = getpid();
     LogFp = stderr;
     setbuf(stderr, NULL);
@@ -10009,18 +9572,6 @@ void initialize(int argc, char *argv[]) {
     } else {
 	doargs(argc, i, argv);
     }
-#ifndef WINDOWS
-    signal(SIGHUP, handler);
-    signal(SIGTERM, handler);
-    signal(SIGINT, handler);
-    signal(SIGPIPE, handler);
-    signal(SIGUSR1, handler);
-    signal(SIGUSR2, handler);
-    signal(SIGSEGV, handler);
-    signal(SIGBUS, handler);
-    signal(SIGILL, handler);
-    signal(SIGFPE, handler);
-#endif
 #ifndef NO_FORK
     if (!DryRun && NForks) {
 	Pid = malloc(sizeof(pid_t) * NForks);
@@ -10070,26 +9621,6 @@ void initialize(int argc, char *argv[]) {
 #ifdef PTHREAD
     pthread_attr_init(&thread_attr);
     pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_DETACHED);
-#endif
-#ifdef WINDOWS
-    PairMutex = ConnMutex = OrigMutex = AsyncMutex = NULL;
-    if (!(PairMutex=CreateMutex(NULL, FALSE, NULL)) ||
-	!(ConnMutex=CreateMutex(NULL, FALSE, NULL)) ||
-	!(OrigMutex=CreateMutex(NULL, FALSE, NULL)) ||
-	!(AsyncMutex=CreateMutex(NULL, FALSE, NULL)) ||
-#ifndef USE_EPOLL
-	!(FdRinMutex=CreateMutex(NULL, FALSE, NULL)) ||
-	!(FdWinMutex=CreateMutex(NULL, FALSE, NULL)) ||
-	!(FdEinMutex=CreateMutex(NULL, FALSE, NULL)) ||
-#endif
-	!(ExBufMutex=CreateMutex(NULL, FALSE, NULL)) ||
-	!(FPairMutex=CreateMutex(NULL, FALSE, NULL)) ||
-#ifdef ADDRCACHE
-	!(HashMutex=CreateMutex(NULL, FALSE, NULL)) ||
-#endif
-	!(PkBufMutex=CreateMutex(NULL, FALSE, NULL)) ) {
-	message(LOG_ERR, "Can't create Mutex err=%d", (int)GetLastError());
-    }
 #endif
 #ifdef OS2
     PairMutex = ConnMutex = OrigMutex = AsyncMutex = NULLHANDLE;
