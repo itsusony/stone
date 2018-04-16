@@ -352,7 +352,7 @@ typedef struct {
     socklen_t len;
     struct sockaddr addr;
 } SockAddr;
-#define SockAddrBaseSize	((int)&((SockAddr*)NULL)->addr)
+#define SockAddrBaseSize	((intptr_t)&((SockAddr*)NULL)->addr)
 
 typedef struct _XHosts {
     struct _XHosts *next;
@@ -3442,8 +3442,8 @@ void freePair(Pair *pair) {
 #ifdef USE_EPOLL
 	if (Debug > 6)
 	    message(LOG_DEBUG, "%d TCP %d: freePair "
-		    "epoll_ctl %d DEL %x",
-		    pair->stone->sd, sd, ePollFd, (int)pair);
+		    "epoll_ctl %d DEL %lx",
+		    pair->stone->sd, sd, ePollFd, (uintptr_t)pair);
 	epoll_ctl(ePollFd, EPOLL_CTL_DEL, sd, NULL);
 #endif
 	closesocket(sd);
@@ -3670,8 +3670,8 @@ done:
     ev.events = EPOLLONESHOT;
     ev.data.ptr = p1;
     if (Debug > 6)
-	message(LOG_DEBUG, "%d TCP %d: doconnect epoll_ctl %d ADD %x",
-		p1->stone->sd, p1->sd, ePollFd, (int)ev.data.ptr);
+	message(LOG_DEBUG, "%d TCP %d: doconnect epoll_ctl %d ADD %lx",
+		p1->stone->sd, p1->sd, ePollFd, (uintptr_t)ev.data.ptr);
     if (epoll_ctl(ePollFd, EPOLL_CTL_ADD, p1->sd, &ev) < 0) {
 	message(LOG_ERR, "%d TCP %d: doconnect epoll_ctl %d ADD err=%d",
 		p1->stone->sd, p1->sd, ePollFd, errno);
@@ -3856,8 +3856,8 @@ Pair *acceptPair(Stone *stone) {
     ev.events = EPOLLONESHOT;
     ev.data.ptr = pair;
     if (Debug > 6)
-	message(LOG_DEBUG, "%d TCP %d: acceptPair epoll_ctl %d ADD %x",
-		stone->sd, pair->sd, ePollFd, (int)ev.data.ptr);
+	message(LOG_DEBUG, "%d TCP %d: acceptPair epoll_ctl %d ADD %lx",
+		stone->sd, pair->sd, ePollFd, (uintptr_t)ev.data.ptr);
     if (epoll_ctl(ePollFd, EPOLL_CTL_ADD, pair->sd, &ev) < 0) {
 	message(LOG_ERR, "%d TCP %d: acceptPair epoll_ctl %d ADD err=%d",
 		stone->sd, pair->sd, ePollFd, errno);
@@ -6037,8 +6037,8 @@ void proto2fdset(
 #ifdef USE_EPOLL
     if (Debug > 7)
 	message(LOG_DEBUG, "%d TCP %d: proto2fdset "
-		"epoll_ctl %d MOD %x events=%x",
-		pair->stone->sd, sd, ePollFd, (int)ev.data.ptr, ev.events);
+		"epoll_ctl %d MOD %lx events=%x",
+		pair->stone->sd, sd, ePollFd, (uintptr_t)ev.data.ptr, ev.events);
 #endif
     pair->proto &= ~proto_dirty;
 }
@@ -6641,8 +6641,8 @@ void dispatch(int epfd, struct epoll_event *evs, int nevs) {
 	    Pair pair;
 	    Origin origin;
 	} *p;
-	if (Debug > 8) message(LOG_DEBUG, "epoll %d: evs[%d].data=%x",
-			       epfd, i, (int)ev.data.ptr);
+	if (Debug > 8) message(LOG_DEBUG, "epoll %d: evs[%d].data=%lx",
+			       epfd, i, (uintptr_t)ev.data.ptr);
 	common = *(int*)ev.data.ptr;
 	other = (ev.events & ~(EPOLLIN | EPOLLPRI | EPOLLOUT));
 	p = ev.data.ptr;
@@ -9705,8 +9705,8 @@ void initialize(int argc, char *argv[]) {
 	    ev.events = (EPOLLIN | EPOLLPRI);
 	    ev.data.ptr = stone;
 	    if (Debug > 6)
-		message(LOG_DEBUG, "stone %d: epoll_ctl %d ADD %x",
-			stone->sd, ePollFd, (int)ev.data.ptr);
+		message(LOG_DEBUG, "stone %d: epoll_ctl %d ADD %lx",
+			stone->sd, ePollFd, (uintptr_t)ev.data.ptr);
 	    if (epoll_ctl(ePollFd, EPOLL_CTL_ADD, stone->sd, &ev) < 0) {
 		message(LOG_CRIT, "stone %d: epoll_ctl %d ADD err=%d",
 			stone->sd, ePollFd, errno);
