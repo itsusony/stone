@@ -9985,7 +9985,7 @@ void initialize(int argc, char *argv[]) {
     if (Syslog) {
 	snprintf(SyslogName, STRMAX, "stone[%d]", MyPid);
 	SyslogName[STRMAX] = '\0';
-	openlog(SyslogName, 0, LOG_DAEMON);
+	openlog(SyslogName, 0, LOG_LOCAL0);
 	if (Syslog > 1) setbuf(stdout, NULL);
     }
 #endif
@@ -10061,7 +10061,7 @@ void initialize(int argc, char *argv[]) {
 	    closelog();
 	    snprintf(SyslogName, STRMAX, "stone[%d]", MyPid);
 	    SyslogName[STRMAX] = '\0';
-	    openlog(SyslogName, 0, LOG_DAEMON);
+	    openlog(SyslogName, 0, LOG_LOCAL0);
 	}
 #endif
 	message(LOG_INFO, "child start (%s) [%d]", VERSION, MyPid);
