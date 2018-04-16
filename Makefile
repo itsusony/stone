@@ -16,8 +16,6 @@
 # -DPTHREAD     use Posix Thread
 # -DPRCTL	use prctl(2) - operations on a process
 # -DOS2		OS/2 with EMX
-# -DWINDOWS	Windows95/98/NT
-# -DNT_SERVICE	WindowsNT/2000 native service
 
 CFLAGS=		# -g
 
@@ -45,16 +43,12 @@ all:
 	@echo "solaris   ; for Solaris with gcc"
 	@echo "hp        ; for HP-UX with gcc"
 	@echo "irix      ; for IRIX"
-	@echo "win       ; for Windows 95/NT with VC++"
-	@echo "win-svc   ; for Windows NT service with VC++"
-	@echo "mingw     ; for Windows 95/NT with MinGW"
-	@echo "mingw-svc ; for Windows NT service with MinGW"
 	@echo "emx       ; for OS/2 with EMX"
 	@echo "using POP -> APOP conv., add '-pop' (example: linux-pop)"
 	@echo "using above conv. and OpenSSL, add '-ssl' (example: linux-ssl)"
 
 clean:
-	rm -f stone $(POP_LIBS) stone.exe stone.obj md5c.obj stone.o $(SVC_LIBS) MSG00001.bin logmsg.h logmsg.rc cryptoapi.o
+	rm -f stone $(POP_LIBS) stone.obj md5c.obj stone.o $(SVC_LIBS) MSG00001.bin logmsg.h logmsg.rc cryptoapi.o
 
 md5c.c:
 	@echo "*** md5c.c is contained in RFC1321"
@@ -68,19 +62,6 @@ pop_stone: $(POP_LIBS)
 ssl_stone:
 	$(MAKE) FLAGS="$(POP_FLAGS) $(SSL_FLAGS) $(FLAGS)" LIBS="$(LIBS) $(SSL_LIBS)" $(TARGET)
 
-stone.exe: stone.c
-	$(CC) $(CFLAGS) $(FLAGS) $? $(LIBS)
-
-pop_stone.exe: md5c.obj
-	$(MAKE) FLAGS=-DUSE_POP LIBS="md5c.obj" $(TARGET)
-
-ssl_stone.exe:
-	$(MAKE) FLAGS="-DUSE_POP -DUSE_SSL" LIBS="ssleay32.lib libeay32.lib" $(TARGET)
-#	$(MAKE) FLAGS=-DUSE_SSL LIBS="ssl32.lib crypt32.lib" $(TARGET)
-
-svc_stone.exe: logmsg.res
-	$(MAKE) FLAGS="/DNT_SERVICE $(FLAGS)" LIBS="logmsg.res advapi32.lib user32.lib gdi32.lib shell32.lib kernel32.lib" $(TARGET)
-
 logmsg.rc: logmsg.mc
 	$(MC) -i $?
 
@@ -92,9 +73,6 @@ logmsg.o: logmsg.res
 
 cryptoapi.o: cryptoapi.c
 	$(MINGWCC) -c $? -o $@
-
-svc_stone: logmsg.rc $(SVC_LIBS)
-	$(MAKE) FLAGS="-DNT_SERVICE $(FLAGS)" LIBS="$(LIBS) $(SVC_LIBS) -ladvapi32 -luser32 -lshell32 -lkernel32" $(TARGET)
 
 linux:
 	$(MAKE) FLAGS="-O -Wall -DCPP='\"/usr/bin/cpp -traditional\"' -DPTHREAD -DUNIX_DAEMON -DPRCTL -DSO_ORIGINAL_DST=80 -DUSE_EPOLL $(FLAGS)" LIBS="-lpthread $(LIBS)" stone
@@ -178,42 +156,6 @@ irix-pop:
 
 irix-ssl:
 	$(MAKE) TARGET=irix ssl_stone
-
-win:
-	$(MAKE) FLAGS="/Zi /DWINDOWS /DNO_RINDEX /DNO_SNPRINTF /DNO_VSNPRINTF /DNO_PID_T $(FLAGS)" LIBS="/MT wsock32.lib $(LIBS) /link /NODEFAULTLIB:LIBC" stone.exe
-
-win-pop:
-	$(MAKE) TARGET=win pop_stone.exe
-
-win-ssl:
-	$(MAKE) TARGET=win ssl_stone.exe
-
-win-svc:
-	$(MAKE) TARGET=win svc_stone.exe
-
-mingw.exe: stone.c
-	$(MINGWCC) $(CFLAGS) $(FLAGS) -o stone.exe $? $(LIBS)
-
-mingw:
-	$(MAKE) CC="$(MINGWCC)" FLAGS="-O -Wall -D_WIN32_WINNT=0x0501 -DWINDOWS -DNO_RINDEX -DADDRCACHE $(FLAGS)" LIBS="$(LIBS) -lws2_32 -lregex -lgdi32" mingw.exe
-
-mingw-pop:
-	$(MAKE) CC="$(MINGWCC)" TARGET=mingw pop_stone
-
-mingw-ssl: cryptoapi.o
-	$(MAKE) CC="$(MINGWCC)" FLAGS="$(FLAGS)" SSL_FLAGS="-DUSE_SSL -DCRYPTOAPI" SSL_LIBS="cryptoapi.o -lcrypt32 -lssl32 -leay32" TARGET=mingw ssl_stone
-
-mingw-me:
-	$(MAKE) CC="$(MINGWCC)" FLAGS="-DNO_ADDRINFO" mingw-ssl
-
-mingw-nt:
-	$(MAKE) CC="$(MINGWCC)" FLAGS="-DNO_ADDRINFO" TARGET=mingw-ssl svc_stone
-
-mingw-svc:
-	$(MAKE) CC="$(MINGWCC)" TARGET=mingw-ssl svc_stone
-
-emx:
-	$(MAKE) CC=gcc FLAGS="-DOS2 -Zmts -Zsysv-signals $(FLAGS)" LIBS="$(LIBS) -lsocket" stone.exe
 
 emx-pop:
 	$(MAKE) TARGET=emx pop_stone
