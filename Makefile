@@ -15,7 +15,6 @@
 # -DNO_ADDRINFO without getaddrinfo
 # -DPTHREAD     use Posix Thread
 # -DPRCTL	use prctl(2) - operations on a process
-# -DOS2		OS/2 with EMX
 
 CFLAGS=		# -g
 

@@ -75,7 +75,6 @@
  * -DUSE_EPOLL	  use epoll(4) (Linux)
  * -DPTHREAD      use Posix Thread
  * -DPRCTL	  use prctl(2) - operations on a process
- * -DOS2	  OS/2 with EMX
  */
 #define VERSION	"2.3e"
 static char *CVS_ID =
@@ -99,24 +98,7 @@ static char *CVS_ID =
 typedef void (*FuncPtr)(void*);
 
 #include <sys/param.h>
-#ifdef OS2
-#define INCL_DOSSEMAPHORES
-#define INCL_DOSERRORS
-#include <process.h>
-#include <os2.h>
-#define NO_SYSLOG
-#define	NO_UNIXDOMAIN
-#define ASYNC(func,arg)	{\
-    if (Debug > 7) message(LOG_DEBUG,"ASYNC: %d",AsyncCount);\
-    waitMutex(AsyncMutex);\
-    AsyncCount++;\
-    freeMutex(AsyncMutex);\
-    if (_beginthread((FuncPtr)func,NULL,32768,arg) < 0) {\
-	message(LOG_ERR,"_beginthread error err=%d",errno);\
-	func(arg);\
-    }\
-}
-#else	/* ! OS2 */
+
 #ifdef PTHREAD
 #include <pthread.h>
 pthread_attr_t thread_attr;
@@ -145,7 +127,7 @@ typedef void *(*aync_start_routine) (void *);
 }
 #define NO_THREAD
 #endif	/* ! PTHREAD */
-#endif	/* ! OS2 */
+
 #include <sys/wait.h>
 #include <sys/time.h>
 #include <sys/socket.h>
@@ -685,14 +667,6 @@ char FastMutexs[11];
 #define	PkBufMutex	9
 #ifdef ADDRCACHE
 #define	HashMutex	10
-#endif
-#endif
-#ifdef OS2
-HMTX PairMutex, ConnMutex, OrigMutex, AsyncMutex;
-HMTX FdRinMutex, FdWinMutex, FdEinMutex;
-HMTX ExBufMutex, FPairMutex, PkBufMutex;
-#ifdef ADDRCACHE
-HMTX HashMutex;
 #endif
 #endif
 
@@ -1557,29 +1531,6 @@ XHosts *checkXhost(XHosts *xhosts, struct sockaddr *sa, socklen_t salen) {
     return NULL;
 }
 
-#ifdef OS2
-void waitMutex(HMTX h) {
-    APIRET ret;
-    if (h) {
-	ret = DosRequestMutexSem(h, 500);	/* 0.5 sec */
-	if (ret == ERROR_TIMEOUT) {
-	    message(LOG_WARNING, "timeout to wait mutex");
-	} else if (ret) {
-	    message(LOG_ERR, "Fail to request mutex err=%d", ret);
-	}
-    }
-}
-
-void freeMutex(HMTX h) {
-    APIRET ret;
-    if (h) {
-	ret = DosReleaseMutexSem(h);
-	if (ret) {
-	    message(LOG_ERR, "Fail to release mutex err=%d", ret);
-	}
-    }
-}
-#else	/* ! OS2 */
 #ifdef PTHREAD
 void waitMutex(int h) {
     int err;
@@ -1617,10 +1568,9 @@ void freeMutex(int h) {
     }
     pthread_mutex_unlock(&FastMutex);
 }
-#else	/* ! OS2 & PTHREAD */
+#else	/* PTHREAD */
 #define waitMutex(sem)	/* */
 #define freeMutex(sem)	/* */
-#endif
 #endif
 
 /* backup */
@@ -9621,26 +9571,6 @@ void initialize(int argc, char *argv[]) {
 #ifdef PTHREAD
     pthread_attr_init(&thread_attr);
     pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_DETACHED);
-#endif
-#ifdef OS2
-    PairMutex = ConnMutex = OrigMutex = AsyncMutex = NULLHANDLE;
-    if ((j=DosCreateMutexSem(NULL, &PairMutex, 0, FALSE)) ||
-	(j=DosCreateMutexSem(NULL, &ConnMutex, 0, FALSE)) ||
-	(j=DosCreateMutexSem(NULL, &OrigMutex, 0, FALSE)) ||
-	(j=DosCreateMutexSem(NULL, &AsyncMutex, 0, FALSE)) ||
-#ifndef USE_EPOLL
-	(j=DosCreateMutexSem(NULL, &FdRinMutex, 0, FALSE)) ||
-	(j=DosCreateMutexSem(NULL, &FdWinMutex, 0, FALSE)) ||
-	(j=DosCreateMutexSem(NULL, &FdEinMutex, 0, FALSE)) ||
-#endif
-	(j=DosCreateMutexSem(NULL, &ExBufMutex, 0, FALSE)) ||
-	(j=DosCreateMutexSem(NULL, &FPairMutex, 0, FALSE)) ||
-#ifdef ADDRCACHE
-	(j=DosCreateMutexSem(NULL, &HashMutex, 0, FALSE)) ||
-#endif
-	(j=DosCreateMutexSem(NULL, &PkBufMutex, 0, FALSE)) ) {
-	message(LOG_ERR, "Can't create Mutex err=%d", j);
-    }
 #endif
 #ifndef NO_THREAD
 #ifdef USE_SSL
